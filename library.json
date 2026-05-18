@@ -1,0 +1,31 @@
+{
+  "name": "NMEA2000_TWAI",
+  "version": "1.0.0",
+  "description": "NMEA2000 CAN driver for ESP32 (possibly all variants, tested on C3) using the ESP-IDF TWAI peripheral directly. Drop-in replacement for ttlappalainen/NMEA2000_esp32 that compiles on ESP32-C3/C6/S3 (the original NMEA2000_esp32 includes Xtensa-only soc/dport_reg.h and will not build for RISC-V targets). Provides sleep/wake helpers for low-power applications and bus-off recovery.",
+  "keywords": "nmea2000, can, twai, esp32, esp32-c3, esp32-c6, esp32-s3, marine, n2k",
+  "authors": [
+    {
+      "name": "Tijs van Roon",
+      "url": "https://github.com/knifter",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/knifter/NMEA2000_TWAI"
+  },
+  "frameworks": ["arduino", "espidf"],
+  "platforms": ["espressif32"],
+  "dependencies": [
+    {
+      "name": "NMEA2000",
+      "version": "https://github.com/ttlappalainen/NMEA2000.git"
+    }
+  ],
+  "headers": "NMEA2000_TWAI.h",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}
