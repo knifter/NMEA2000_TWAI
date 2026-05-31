@@ -102,7 +102,7 @@ bool tNMEA2000_TWAI::handleBusError()
         twai_stop();
         twai_driver_uninstall();
         _running = false;
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(500));
         return CANOpen();
     };
     return false;
