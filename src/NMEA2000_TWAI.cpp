@@ -66,6 +66,16 @@ bool tNMEA2000_TWAI::CANGetFrame(unsigned long &id, unsigned char &len,
     return true;
 }
 
+bool tNMEA2000_TWAI::twaiTxQueueEmpty()
+{
+    if (!_running)
+        return true;
+    twai_status_info_t s;
+    if (twai_get_status_info(&s) != ESP_OK)
+        return true;
+    return s.msgs_to_tx == 0;
+}
+
 void tNMEA2000_TWAI::twaiSleep(uint32_t timeout) 
 {
     if (!_running)

@@ -41,6 +41,11 @@ public:
     // A small delay after start allows integration to complete.
     void twaiWake();
 
+    // Non-blocking: true once the driver's TX queue has drained. Poll this
+    // before putting the transceiver into standby so a frame is never cut off
+    // mid-flight (the msgs_to_tx==0 check twaiSleep() blocks on internally).
+    bool twaiTxQueueEmpty();
+
     // Poll from the main loop to recover from bus-off. When the controller
     // has entered TWAI_STATE_BUS_OFF, tears down and reinstalls the driver
     // after a 1 s cool-down. Returns true if recovery was attempted.
