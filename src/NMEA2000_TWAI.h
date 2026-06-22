@@ -70,9 +70,12 @@ public:
     // handleBusError().
     bool txStandby();
 
-    // Poll from the main loop to recover from bus-off. When the controller
-    // has entered TWAI_STATE_BUS_OFF, tears down and reinstalls the driver
-    // after a 1 s cool-down. Returns true if recovery was attempted.
+    // Poll from the main loop to recover from bus-off. When the controller has
+    // entered TWAI_STATE_BUS_OFF, kicks off TWAI's native bus recovery (the
+    // controller waits for 128 * 11 recessive bits, then parks in STOPPED) and
+    // restarts it on a later poll once recovery completes. Non-blocking — the
+    // driver is never torn down and the main loop is never stalled. Returns true
+    // when a recovery step (initiate or restart) was taken this call.
     bool handleBusError();
 
 protected:
@@ -87,8 +90,16 @@ private:
     gpio_num_t   _rxPin;
     CAN_speed_t  _speed;
     bool         _running = false;
+    bool         _recovering = false;    // bus-off recovery in progress
 
     bool            _txAwake   = false;  // transceiver currently out of standby
     tTxWakeCallback _txWakeCb  = nullptr;
     tTxIdleCallback _txIdleCb  = nullptr;
+
+    // Single point of coupling to the base class's send-frame ring buffer.
+    // CANSendFrameBufferRead/Write are protected members of tNMEA2000 (the
+    // library's own drivers read them the same way). Funnelled through here so
+    // the dependency is obvious and lives in one place if the library renames
+    // them.
+    bool librarySendBufferEmpty() const;
 };

@@ -154,19 +154,29 @@ void tNMEA2000_TWAI::twaiWake()
     _running = true;
 }
 
-bool tNMEA2000_TWAI::handleBusError() 
+bool tNMEA2000_TWAI::handleBusError()
 {
+    if (!_running)
+        return false;               // controller stopped on purpose (twaiSleep)
     twai_status_info_t s;
     if (twai_get_status_info(&s) != ESP_OK)
         return false;
     if (s.state == TWAI_STATE_BUS_OFF)
     {
-        ESP_LOGE(TAG, "Bus-Off error detected. re-init...");
-        twai_stop();
-        twai_driver_uninstall();
-        _running = false;
-        vTaskDelay(pdMS_TO_TICKS(500));
-        return CANOpen();
+        // Use TWAI's native recovery rather than tearing the driver down. This
+        // is non-blocking: the controller waits for 128 * 11 recessive bits
+        // (staying in RECOVERING), then parks in STOPPED, where the branch below
+        // restarts it on a later poll. No vTaskDelay, so the main loop runs on.
+        ESP_LOGE(TAG, "Bus-Off detected, initiating recovery...");
+        twai_initiate_recovery();
+        _recovering = true;
+        return true;
+    };
+    if (_recovering && s.state == TWAI_STATE_STOPPED)
+    {
+        ESP_LOGI(TAG, "Bus recovered, restarting controller");
+        _recovering = false;
+        return twai_start() == ESP_OK;
     };
     return false;
 }
