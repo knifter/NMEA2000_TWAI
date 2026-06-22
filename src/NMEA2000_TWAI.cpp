@@ -36,7 +36,6 @@ bool tNMEA2000_TWAI::CANOpen()
     if (twai_start() != ESP_OK)
         return false;
 
-    _running = true;
     return true;
 };
 
@@ -50,6 +49,13 @@ bool tNMEA2000_TWAI::CANSendFrame(unsigned long id, unsigned char len,
     // burst; the rest go straight onto the controller. The transceiver is
     // returned to standby later by txStandby(), driven from the main loop.
     if (len > 8)
+        return false;
+    // If the controller can't transmit (bus-off / recovering / stopped),
+    // twai_transmit would only fail — and we'd have powered the transceiver up
+    // for nothing. Refuse the frame here, before the wake callback, so the
+    // library buffers and retries it; recovery is handleBusError()'s job.
+    twai_status_info_t st;
+    if (twai_get_status_info(&st) != ESP_OK || st.state != TWAI_STATE_RUNNING)
         return false;
     if (!_txAwake)
     {
@@ -121,46 +127,43 @@ bool tNMEA2000_TWAI::librarySendBufferEmpty() const
 
 bool tNMEA2000_TWAI::twaiTxQueueEmpty()
 {
-    if (!_running)
-        return true;
     twai_status_info_t s;
     if (twai_get_status_info(&s) != ESP_OK)
-        return true;
+        return true;                // driver not installed — nothing queued
+    if (s.state == TWAI_STATE_STOPPED)
+        return true;                // controller stopped — nothing to drain
     return s.msgs_to_tx == 0;
 }
 
-void tNMEA2000_TWAI::twaiSleep(uint32_t timeout) 
+void tNMEA2000_TWAI::twaiSleep(uint32_t timeout)
 {
-    if (!_running)
-        return;
     twai_status_info_t s;
+    if (twai_get_status_info(&s) != ESP_OK || s.state == TWAI_STATE_STOPPED)
+        return;                     // not started — nothing to stop
     TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout);
-    while ((int32_t)(xTaskGetTickCount() - deadline) < 0) 
+    while ((int32_t)(xTaskGetTickCount() - deadline) < 0)
     {
-        if (twai_get_status_info(&s) == ESP_OK && s.msgs_to_tx == 0) 
+        if (twai_get_status_info(&s) == ESP_OK && s.msgs_to_tx == 0)
             break;
         vTaskDelay(pdMS_TO_TICKS(1));
     };
     twai_stop();
-    _running = false;
 }
 
-void tNMEA2000_TWAI::twaiWake() 
+void tNMEA2000_TWAI::twaiWake()
 {
-    if (_running) 
-        return;
+    twai_status_info_t s;
+    if (twai_get_status_info(&s) == ESP_OK && s.state != TWAI_STATE_STOPPED)
+        return;                     // already started
     twai_start();
     vTaskDelay(pdMS_TO_TICKS(2));
-    _running = true;
 }
 
 bool tNMEA2000_TWAI::handleBusError()
 {
-    if (!_running)
-        return false;               // controller stopped on purpose (twaiSleep)
     twai_status_info_t s;
     if (twai_get_status_info(&s) != ESP_OK)
-        return false;
+        return false;               // driver not installed — nothing to recover
     if (s.state == TWAI_STATE_BUS_OFF)
     {
         // Use TWAI's native recovery rather than tearing the driver down. This

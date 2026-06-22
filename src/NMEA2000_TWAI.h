@@ -89,7 +89,6 @@ private:
     gpio_num_t   _txPin;
     gpio_num_t   _rxPin;
     CAN_speed_t  _speed;
-    bool         _running = false;
     bool         _recovering = false;    // bus-off recovery in progress
 
     bool            _txAwake   = false;  // transceiver currently out of standby
