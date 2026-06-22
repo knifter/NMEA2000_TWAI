@@ -41,18 +41,54 @@ bool tNMEA2000_TWAI::CANOpen()
 };
 
 bool tNMEA2000_TWAI::CANSendFrame(unsigned long id, unsigned char len,
-                                  const unsigned char *buf, bool wait_sent) 
+                                  const unsigned char *buf, bool wait_sent)
 {
-    if (!_running)
-        twaiWake();
+    // Transmit immediately. If the transceiver is still in standby, bring it up
+    // first via the wake callback; a false return means "not ready yet" — refuse
+    // the frame so the NMEA2000 library buffers it and retries on the next
+    // ParseMessages(). _txAwake keeps the wake/settle to the first frame of a
+    // burst; the rest go straight onto the controller. The transceiver is
+    // returned to standby later by txStandby(), driven from the main loop.
+    if (len > 8)
+        return false;
+    if (!_txAwake)
+    {
+        if (_txWakeCb != nullptr && !_txWakeCb())
+            return false;           // not ready — library buffers + retries
+        _txAwake = true;
+    };
     twai_message_t msg = {};
-    msg.extd             = 1;   // NMEA 2000 uses 29-bit extended frames
+    msg.extd             = 1;       // NMEA 2000 uses 29-bit extended frames
     msg.identifier       = id;
     msg.data_length_code = len;
     memcpy(msg.data, buf, len);
-    // Fire and forget — frames pipeline through the driver's TX queue.
-    // Quiescence (needed only before twai_stop()) is waited for in twaiSleep().
-    return twai_transmit(&msg, 0) == ESP_OK;
+    return twai_transmit(&msg, 0) == ESP_OK;   // HW queue full — library retries
+}
+
+void tNMEA2000_TWAI::setTxStandbyCallbacks(tTxWakeCallback wake, tTxIdleCallback idle)
+{
+    _txWakeCb = wake;
+    _txIdleCb = idle;
+}
+
+bool tNMEA2000_TWAI::txStandby()
+{
+    // Non-blocking. Drop the transceiver to standby only once everything queued
+    // has drained — both the NMEA2000 library send buffer AND the controller's
+    // HW TX queue — so a frame is never cut off mid-flight. Returns true if the
+    // transceiver is (now) in standby, false while frames are still in flight.
+    // The driver never busy-waits; the caller decides whether to loop.
+    if (!_txAwake)
+        return true;                // already in standby
+    SendFrames();                   // push any library backlog to HW (non-blocking)
+    if (CANSendFrameBufferRead != CANSendFrameBufferWrite)
+        return false;               // library still has frames queued
+    if (!twaiTxQueueEmpty())
+        return false;               // HW queue still draining onto the bus
+    if (_txIdleCb != nullptr)
+        _txIdleCb();
+    _txAwake = false;
+    return true;
 }
 
 bool tNMEA2000_TWAI::CANGetFrame(unsigned long &id, unsigned char &len,

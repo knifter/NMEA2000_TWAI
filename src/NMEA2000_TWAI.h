@@ -14,7 +14,6 @@
 #define TWAI_TX_QUEUE_LEN 20
 #endif
 
-
 class tNMEA2000_TWAI : public tNMEA2000 {
 public:
     typedef enum {
@@ -46,6 +45,27 @@ public:
     // mid-flight (the msgs_to_tx==0 check twaiSleep() blocks on internally).
     bool twaiTxQueueEmpty();
 
+    // --- Transmit gate -------------------------------------------------------
+    // Lets the application keep the CAN transceiver in standby and power it up
+    // only around a real transmit burst, without ever stopping the TWAI
+    // controller (so RX keeps working in standby). CANSendFrame() transmits
+    // directly: the first frame of a burst brings the transceiver up via the
+    // wake callback, the rest go straight onto the controller. Frames that
+    // cannot be queued (transceiver not ready, HW queue full) are refused so the
+    // NMEA2000 library buffers and retries them. txStandby(), called from
+    // the main loop, returns the transceiver to standby once everything has
+    // drained.
+    typedef bool (*tTxWakeCallback)();   // bring transceiver up; true = ready to send
+    typedef void (*tTxIdleCallback)();   // queues drained; safe to standby
+    void setTxStandbyCallbacks(tTxWakeCallback wake, tTxIdleCallback idle);
+
+    // Non-blocking. Returns the transceiver to standby once the NMEA2000 library
+    // send buffer AND the controller's HW TX queue have both drained, so a frame
+    // is never cut off. Returns true if the transceiver is (now) in standby,
+    // false while frames are still in flight. The driver never busy-waits — the
+    // caller decides whether to loop on it before the next transmit cycle.
+    bool txStandby();
+
     // Poll from the main loop to recover from bus-off. When the controller
     // has entered TWAI_STATE_BUS_OFF, tears down and reinstalls the driver
     // after a 1 s cool-down. Returns true if recovery was attempted.
@@ -63,4 +83,8 @@ private:
     gpio_num_t   _rxPin;
     CAN_speed_t  _speed;
     bool         _running = false;
+
+    bool            _txAwake   = false;  // transceiver currently out of standby
+    tTxWakeCallback _txWakeCb  = nullptr;
+    tTxIdleCallback _txIdleCb  = nullptr;
 };
