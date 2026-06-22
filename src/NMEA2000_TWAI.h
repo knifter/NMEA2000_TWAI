@@ -64,6 +64,10 @@ public:
     // is never cut off. Returns true if the transceiver is (now) in standby,
     // false while frames are still in flight. The driver never busy-waits — the
     // caller decides whether to loop on it before the next transmit cycle.
+    // If the controller is not in the RUNNING state (bus-off / recovering) it
+    // drops straight to standby and returns true, since nothing can drain — this
+    // keeps a caller's drain loop from livelocking; recovery is left to
+    // handleBusError().
     bool txStandby();
 
     // Poll from the main loop to recover from bus-off. When the controller

@@ -80,6 +80,18 @@ bool tNMEA2000_TWAI::txStandby()
     // The driver never busy-waits; the caller decides whether to loop.
     if (!_txAwake)
         return true;                // already in standby
+    // If the controller can't transmit (bus-off / recovering), nothing will ever
+    // drain — waiting for it would livelock the caller. Give up draining, drop to
+    // standby, and let handleBusError() recover. The still-queued frames can't go
+    // out anyway; the library keeps retrying them once the bus is back.
+    twai_status_info_t st;
+    if (twai_get_status_info(&st) != ESP_OK || st.state != TWAI_STATE_RUNNING)
+    {
+        if (_txIdleCb != nullptr)
+            _txIdleCb();
+        _txAwake = false;
+        return true;
+    };
     SendFrames();                   // push any library backlog to HW (non-blocking)
     if (!librarySendBufferEmpty())
         return false;               // library still has frames queued
