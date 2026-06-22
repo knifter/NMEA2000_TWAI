@@ -81,7 +81,7 @@ bool tNMEA2000_TWAI::txStandby()
     if (!_txAwake)
         return true;                // already in standby
     SendFrames();                   // push any library backlog to HW (non-blocking)
-    if (CANSendFrameBufferRead != CANSendFrameBufferWrite)
+    if (!librarySendBufferEmpty())
         return false;               // library still has frames queued
     if (!twaiTxQueueEmpty())
         return false;               // HW queue still draining onto the bus
@@ -100,6 +100,11 @@ bool tNMEA2000_TWAI::CANGetFrame(unsigned long &id, unsigned char &len,
     len = msg.data_length_code;
     memcpy(buf, msg.data, len);
     return true;
+}
+
+bool tNMEA2000_TWAI::librarySendBufferEmpty() const
+{
+    return CANSendFrameBufferRead == CANSendFrameBufferWrite;
 }
 
 bool tNMEA2000_TWAI::twaiTxQueueEmpty()
